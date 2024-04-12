@@ -1,4 +1,5 @@
 use nom::character::complete::{multispace0, multispace1};
+use nom::sequence::pair;
 use std::fmt;
 use std::str;
 
@@ -18,6 +19,8 @@ use nom::sequence::{delimited, preceded, terminated, tuple};
 use nom::IResult;
 use order::{order_clause, OrderClause};
 use table::Table;
+
+use crate::common::ws_sep_comma;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct GroupByClause {
@@ -76,6 +79,32 @@ impl fmt::Display for LimitClause {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub enum WindowType {
+    Time,
+    Count,
+}
+
+impl fmt::Display for WindowType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct WindowClause {
+    pub wt: WindowType,
+    /// Interval, in u64
+    pub interval: u64,
+    pub step: u64,
+}
+
+impl fmt::Display for WindowClause {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "WINDOW({}, {}, {})", self.wt, self.interval, self.step)
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct SelectStatement {
     pub tables: Vec<Table>,
@@ -86,6 +115,7 @@ pub struct SelectStatement {
     pub group_by: Option<GroupByClause>,
     pub order: Option<OrderClause>,
     pub limit: Option<LimitClause>,
+    pub window: Option<WindowClause>,
 }
 
 impl fmt::Display for SelectStatement {
@@ -188,6 +218,34 @@ pub fn limit_clause(i: &[u8]) -> IResult<&[u8], LimitClause> {
     Ok((remaining_input, LimitClause { limit, offset }))
 }
 
+// Parse WINDOW clause
+pub fn window_clause(i: &[u8]) -> IResult<&[u8], WindowClause> {
+    let (remaining_input, (_, _, (wt, _, interval, _, step))) = tuple((
+        multispace0,
+        tag_no_case("window"),
+        delimited(
+            terminated(tag("("), multispace0),
+            tuple((
+                alt((tag_no_case("count"), tag_no_case("time"))),
+                ws_sep_comma,
+                unsigned_number,
+                ws_sep_comma,
+                unsigned_number,
+            )),
+            preceded(multispace0, tag(")")),
+        ),
+    ))(i)?;
+
+    let wt = str::from_utf8(wt).unwrap().to_lowercase();
+    let wt = if wt == "count" {
+        WindowType::Count
+    } else {
+        WindowType::Time
+    };
+
+    Ok((remaining_input, WindowClause { wt, interval, step }))
+}
+
 fn join_constraint(i: &[u8]) -> IResult<&[u8], JoinConstraint> {
     let using_clause = map(
         tuple((
@@ -276,7 +334,7 @@ pub fn selection(i: &[u8]) -> IResult<&[u8], SelectStatement> {
 pub fn nested_selection(i: &[u8]) -> IResult<&[u8], SelectStatement> {
     let (
         remaining_input,
-        (_, _, distinct, _, fields, _, tables, join, where_clause, group_by, order, limit),
+        (_, _, distinct, _, fields, _, tables, join, where_clause, group_by, order, limit, window),
     ) = tuple((
         tag_no_case("select"),
         multispace1,
@@ -290,6 +348,7 @@ pub fn nested_selection(i: &[u8]) -> IResult<&[u8], SelectStatement> {
         opt(group_by_clause),
         opt(order_clause),
         opt(limit_clause),
+        opt(window_clause),
     ))(i)?;
     Ok((
         remaining_input,
@@ -302,6 +361,7 @@ pub fn nested_selection(i: &[u8]) -> IResult<&[u8], SelectStatement> {
             group_by,
             order,
             limit,
+            window,
         },
     ))
 }
@@ -533,7 +593,7 @@ mod tests {
                 tables: vec![Table {
                     name: String::from("PaperTag"),
                     alias: Some(String::from("t")),
-					schema: None,
+                    schema: None,
                 },],
                 fields: vec![FieldDefinitionExpression::All],
                 ..Default::default()
@@ -554,7 +614,7 @@ mod tests {
                 tables: vec![Table {
                     name: String::from("PaperTag"),
                     alias: Some(String::from("t")),
-					schema: Some(String::from("db1")),
+                    schema: Some(String::from("db1")),
                 },],
                 fields: vec![FieldDefinitionExpression::All],
                 ..Default::default()
