@@ -90,7 +90,7 @@ impl fmt::Display for WindowType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             WindowType::Time(ival, step) => {
-                write!(f, "Time({}ms, {}ms)", ival.as_millis(), step.as_millis())
+                write!(f, "Time({:?}, {:?})", ival, step)
             }
             WindowType::Count(count, step) => write!(f, "Count({}, {})", count, step),
         }
