@@ -2,6 +2,7 @@ use nom::character::complete::{multispace0, multispace1};
 use nom::sequence::pair;
 use std::fmt;
 use std::str;
+use std::time::Duration;
 
 use column::Column;
 use common::FieldDefinitionExpression;
@@ -81,27 +82,29 @@ impl fmt::Display for LimitClause {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum WindowType {
-    Time,
-    Count,
+    Time(Duration, Duration),
+    Count(u64, u64),
 }
 
 impl fmt::Display for WindowType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            WindowType::Time(ival, step) => {
+                write!(f, "Time({}ms, {}ms)", ival.as_millis(), step.as_millis())
+            }
+            WindowType::Count(count, step) => write!(f, "Count({}, {})", count, step),
+        }
     }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct WindowClause {
     pub wt: WindowType,
-    /// Interval, in u64
-    pub interval: u64,
-    pub step: u64,
 }
 
 impl fmt::Display for WindowClause {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "WINDOW({}, {}, {})", self.wt, self.interval, self.step)
+        write!(f, "WINDOW({})", self.wt)
     }
 }
 
@@ -238,12 +241,15 @@ pub fn window_clause(i: &[u8]) -> IResult<&[u8], WindowClause> {
 
     let wt = str::from_utf8(wt).unwrap().to_lowercase();
     let wt = if wt == "count" {
-        WindowType::Count
+        WindowType::Count(interval, step)
     } else {
-        WindowType::Time
+        WindowType::Time(
+            Duration::from_millis(interval),
+            Duration::from_millis(interval),
+        )
     };
 
-    Ok((remaining_input, WindowClause { wt, interval, step }))
+    Ok((remaining_input, WindowClause { wt }))
 }
 
 fn join_constraint(i: &[u8]) -> IResult<&[u8], JoinConstraint> {
