@@ -408,6 +408,24 @@ mod tests {
     }
 
     #[test]
+    fn simple_select_with_window() {
+        let qstring = "SELECT id, name FROM users WINDOW(time, 1000, 1000);";
+
+        let res = selection(qstring.as_bytes());
+        assert_eq!(
+            res.unwrap().1,
+            SelectStatement {
+                tables: vec![Table::from("users")],
+                fields: columns(&["id", "name"]),
+                window: Some(WindowClause {
+                    wt: WindowType::Time(Duration::from_millis(1000), Duration::from_millis(1000))
+                }),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
     fn more_involved_select() {
         let qstring = "SELECT users.id, users.name FROM users;";
 

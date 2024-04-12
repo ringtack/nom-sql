@@ -173,6 +173,7 @@ fn keyword_s_to_z(i: &[u8]) -> IResult<&[u8], &[u8]> {
         terminated(tag_no_case("VIRTUAL"), keyword_follow_char),
         terminated(tag_no_case("WHEN"), keyword_follow_char),
         terminated(tag_no_case("WHERE"), keyword_follow_char),
+        terminated(tag_no_case("WINDOW"), keyword_follow_char),
         terminated(tag_no_case("WITH"), keyword_follow_char),
         terminated(tag_no_case("WITHOUT"), keyword_follow_char),
     ))(i)
